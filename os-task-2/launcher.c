@@ -15,8 +15,10 @@
 
 typedef struct process {
 	char command[MAX_COM_LEN];
+	char path[MAX_COM_LEN + 20];
 	char * args[MAX_ARG_NUM];
 	int type;	//wait - 0, respawn - 1
+	int respawned;
 	pid_t pid;
 };
 
@@ -77,6 +79,8 @@ int getConfig() {
 
 		proc_list[i].pid = 0;
 
+		proc_list[i].respawned = 0;
+
 		i++;
 
 		if (i == MAXPROC) {
@@ -98,6 +102,48 @@ void launch() {
 	printf("All processes launched\n");
 }
 
+int createFile(int index) {
+	if (!proc_list[index].respawned) {
+		char path [MAX_COM_LEN + 20];
+		char fileName [MAX_COM_LEN];
+
+		strcpy(fileName, proc_list[index].command);
+	
+		int i = 0;
+	
+		while (fileName[i] != 0) {
+			if (fileName[i] == '/' || fileName[i] == '.') {
+				fileName[i] = '_';
+			}
+			i++;
+		}
+	
+		i = 1;
+		sprintf(path, "/tmp/%s.pid", fileName);
+
+		while (access(path, 0) != -1) {
+			sprintf(path, "/tmp/%s(%i).pid", fileName, i);
+			i++;
+		}
+
+		sprintf(proc_list[index].path, "%s", path);
+		
+	}
+
+	FILE * fp = fopen(proc_list[index].path, "w");
+	if (fp == NULL) {
+		printf("file problem\n");
+		return;
+	}
+
+	fprintf(fp, "%i", proc_list[index].pid);
+	fclose(fp);
+}
+
+int deleteFile(int index) {
+	remove(proc_list[index].path);
+}
+
 int launchProcess(i) {
 	int cpid = fork();
 
@@ -114,6 +160,7 @@ int launchProcess(i) {
 		exit(0);
 	default:
 		proc_list[i].pid = cpid;
+		createFile(i);
 		proc_count++;
 		return 0;
 	}
@@ -131,7 +178,10 @@ void watch() {
 				proc_list[i].pid = 0;
 			    	proc_count--;
 				if (proc_list[i].type == 1) {
+					proc_list[i].respawned = 1;
 					launchProcess(i);
+				} else {
+					deleteFile(i);
 				}
 			}
 		}
